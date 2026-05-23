@@ -1,0 +1,42 @@
+# Environment Variables - NEVER commit these files
+.env
+.env.local
+.env.*.local
+.env.prod
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dependencies
+node_modules/
+target/
+dist/
+build/
+
+# Maven
+.m2/
+*.jar
+*.war
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+.cache/
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Build outputs
+out/
+bin/
