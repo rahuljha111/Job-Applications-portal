@@ -24,6 +24,7 @@ import {
   Globe,
 } from "lucide-react";
 import { toast } from "sonner";
+import apiService from "../../services/api";
 import type { JobListing } from "../../data/mockJobs";
 import { cn } from "@/lib/utils";
 
@@ -56,10 +57,34 @@ export function ApplicationSidebar({ isOpen, onClose, job }: ApplicationSidebarP
   const onSubmit = async (data: ApplicationFormData) => {
     if (!resumeFile) return toast.error("Resume is required");
     setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    toast.success("Application sent!");
-    setIsSubmitting(false);
-    onClose();
+    try {
+      // 1) Upload resume
+      let resumeResp: any = null;
+      try {
+        resumeResp = await apiService.uploadResume(resumeFile);
+        toast.success("Resume uploaded");
+      } catch (err) {
+        console.warn("Resume upload failed, continuing to apply:", err);
+      }
+
+      // 2) Submit application
+      const payload: any = {
+        coverLetter: data.coverLetter,
+        portfolioUrl: data.portfolioUrl,
+      };
+      if (resumeResp && (resumeResp.id || resumeResp.resumeId)) {
+        payload.resumeId = resumeResp.id || resumeResp.resumeId;
+      }
+
+      await apiService.applyToJob(job.id, payload);
+      toast.success("Application submitted successfully");
+      onClose();
+    } catch (err: any) {
+      console.error("Application failed:", err);
+      toast.error(err?.message || "Failed to submit application");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!job) return null;

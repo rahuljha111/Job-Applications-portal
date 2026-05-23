@@ -39,6 +39,16 @@ public class Application {
 
     private LocalDateTime updatedAt;
 
+    // Optional relationship to a Resume (candidate's uploaded resume)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "resume_id")
+    private com.Jobtrackr.jta.resume.entity.Resume resume;
+
+    @Column(columnDefinition = "text")
+    private String coverLetter;
+
+    private String portfolioUrl;
+
     @PrePersist
     public void prePersist() {
         appliedAt = LocalDateTime.now();

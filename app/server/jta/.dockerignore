@@ -1,0 +1,8 @@
+target
+uploads
+.idea
+.git
+backend.log
+src.zip
+**/node_modules
+**/dist

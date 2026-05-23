@@ -5,6 +5,9 @@ import { Badge } from "../../comoponents/ui/badge";
 import { Textarea } from "../../comoponents/ui/textarea";
 import { Sparkles, Send, FileText, Briefcase, MessageSquare, TrendingUp } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../comoponents/ui/tabs";
+import { useState } from "react";
+import apiService from "../../services/api";
+import { toast } from "sonner";
 
 const aiFeatures = [
   {
@@ -47,6 +50,34 @@ const conversationHistory = [
 ];
 
 export function AIAssistant() {
+  const [input, setInput] = useState("");
+  const [conversation, setConversation] = useState(conversationHistory);
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    // add user message
+    const userMsg = { role: "user", message: input, timestamp: new Date().toLocaleTimeString() };
+    setConversation((c) => [...c, userMsg]);
+    setInput("");
+
+    try {
+      const resp = await apiService.getInterviewPrep({ jobTitle: input });
+      const aiTextParts: string[] = [];
+      if (resp.technicalQuestions) {
+        aiTextParts.push("Technical Questions:\n" + resp.technicalQuestions.map((q: any) => `- ${q.question}`).join("\n"));
+      }
+      if (resp.preparationTips) {
+        aiTextParts.push("Tips:\n" + resp.preparationTips.join("\n"));
+      }
+
+      const aiMsg = { role: "ai", message: aiTextParts.join("\n\n") || "I couldn't generate suggestions.", timestamp: new Date().toLocaleTimeString() };
+      setConversation((c) => [...c, aiMsg]);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "AI request failed");
+    }
+  };
+
   return (
     <>
       <PortalTopbar title="AI Assistant" subtitle="Get personalized AI-powered career guidance" />

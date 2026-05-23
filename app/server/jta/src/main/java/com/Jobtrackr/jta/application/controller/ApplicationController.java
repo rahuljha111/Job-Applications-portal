@@ -3,6 +3,7 @@ package com.Jobtrackr.jta.application.controller;
 import com.Jobtrackr.jta.application.dto.ApplicationResponse;
 import com.Jobtrackr.jta.application.dto.CandidateApplicationResponse;
 import com.Jobtrackr.jta.application.dto.UpdateApplicationStatusRequest;
+import com.Jobtrackr.jta.application.dto.ApplyRequest;
 import com.Jobtrackr.jta.application.service.ApplicationService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,9 +26,9 @@ public class ApplicationController {
     }
 
 @PostMapping("/jobs/{jobId}/apply")
-public ResponseEntity<String> apply(@PathVariable UUID jobId) {
+public ResponseEntity<String> apply(@PathVariable UUID jobId, @RequestBody ApplyRequest request) {
 
-    applicationService.apply(jobId);
+    applicationService.apply(jobId, request);
 
     return ResponseEntity.ok("Application submitted successfully");
 }

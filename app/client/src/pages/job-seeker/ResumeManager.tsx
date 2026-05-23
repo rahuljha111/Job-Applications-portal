@@ -1,28 +1,12 @@
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PortalTopbar } from "../../comoponents/PortalTopbar";
 import { Card, CardContent, CardHeader, CardTitle } from "../../comoponents/ui/card";
 import { Button } from "../../comoponents/ui/button";
 import { Badge } from "../../comoponents/ui/badge";
-import { Upload, FileText, Download, Eye, Edit, Trash2, Sparkles } from "lucide-react";
+import { Upload, FileText, Download, Eye, Edit, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { EmptyState } from "../../comoponents/EmptyState";
-
-const mockResumes = [
-  { 
-    id: 1, 
-    name: "Senior_Developer_Resume.pdf", 
-    uploadedDate: "Feb 1, 2024", 
-    aiScore: 87,
-    isPrimary: true,
-    size: "245 KB"
-  },
-  { 
-    id: 2, 
-    name: "Full_Stack_Resume_V2.pdf", 
-    uploadedDate: "Jan 28, 2024", 
-    aiScore: 82,
-    isPrimary: false,
-    size: "198 KB"
-  },
-];
+import apiService from "../../services/api";
+import { toast } from "sonner";
 
 const aiSuggestions = [
   { category: "Skills", suggestion: "Add more specific technologies (e.g., TypeScript, Next.js)", priority: "high" },
@@ -32,10 +16,78 @@ const aiSuggestions = [
 ];
 
 export function ResumeManager() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [resumes, setResumes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
+
+  const loadResumes = async () => {
+    setLoading(true);
+    try {
+      const response = await apiService.getResumes();
+      const list = Array.isArray(response) ? response : (response as any)?.content || [];
+      setResumes(list);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to load resumes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadResumes();
+  }, []);
+
+  const primaryResume = useMemo(() => resumes.find((resume) => resume.default || resume.isDefault) || resumes[0] || null, [resumes]);
+
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      await apiService.uploadResume(file, "Primary Resume");
+      toast.success("Resume uploaded");
+      await loadResumes();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Resume upload failed");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!primaryResume?.id) {
+      toast.error("Upload a resume first");
+      return;
+    }
+
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const response = await apiService.analyzeResume({
+        resumeId: primaryResume.id,
+        targetRole: "Software Engineer",
+      });
+      setAnalysis(response);
+      toast.success("Resume analyzed");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Resume analysis failed");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   return (
     <>
       <PortalTopbar title="Resume Manager" subtitle="Manage and optimize your resumes" />
       <main className="flex-1 overflow-auto p-6">
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleFileSelected} />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Resume List */}
           <div className="lg:col-span-2 space-y-6">
@@ -43,16 +95,21 @@ export function ResumeManager() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>My Resumes</CardTitle>
-                  <Button className="bg-green-500 hover:bg-green-600">
+                  <Button className="bg-green-500 hover:bg-green-600" onClick={handleUploadClick}>
                     <Upload className="h-4 w-4 mr-2" />
                     Upload Resume
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                {mockResumes.length > 0 ? (
+                {loading ? (
+                  <div className="flex items-center justify-center py-12 text-gray-500 gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading resumes...
+                  </div>
+                ) : resumes.length > 0 ? (
                   <div className="space-y-4">
-                    {mockResumes.map((resume) => (
+                    {resumes.map((resume) => (
                       <div key={resume.id} className="p-4 rounded-lg border hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-3 flex-1">
@@ -61,23 +118,23 @@ export function ResumeManager() {
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-medium">{resume.name}</h4>
-                                {resume.isPrimary && (
+                                <h4 className="font-medium">{resume.originalFileName || resume.label || resume.fileName}</h4>
+                                {(resume.default || resume.isDefault) && (
                                   <Badge variant="secondary" className="bg-green-100 text-green-700">
                                     Primary
                                   </Badge>
                                 )}
                               </div>
                               <div className="flex items-center gap-3 text-sm text-gray-500 mb-2">
-                                <span>Uploaded: {resume.uploadedDate}</span>
+                                <span>Uploaded: {resume.uploadedAt ? new Date(resume.uploadedAt).toLocaleDateString() : "Just now"}</span>
                                 <span>•</span>
-                                <span>{resume.size}</span>
+                                <span>{resume.fileSize ? `${Math.round(resume.fileSize / 1024)} KB` : "N/A"}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Sparkles className="h-4 w-4 text-green-500" />
                                 <span className="text-sm">AI Score: </span>
                                 <Badge variant="secondary" className="bg-green-100 text-green-700">
-                                  {resume.aiScore}/100
+                                  {analysis?.matchScore ?? "--"}/100
                                 </Badge>
                               </div>
                             </div>
@@ -105,7 +162,7 @@ export function ResumeManager() {
                     icon={FileText}
                     title="No resumes uploaded"
                     description="Upload your first resume to get AI-powered insights and recommendations"
-                    action={{ label: "Upload Resume", onClick: () => {} }}
+                    action={{ label: "Upload Resume", onClick: handleUploadClick }}
                   />
                 )}
               </CardContent>
@@ -172,10 +229,20 @@ export function ResumeManager() {
                     </div>
                   ))}
                 </div>
-                <Button className="w-full mt-4 bg-green-500 hover:bg-green-600">
+                <Button className="w-full mt-4 bg-green-500 hover:bg-green-600" onClick={handleAnalyze} disabled={analyzing}>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  Optimize Resume
+                  {analyzing ? "Analyzing..." : "Optimize Resume"}
                 </Button>
+
+                {analysis && (
+                  <div className="mt-4 rounded-lg border bg-white p-4 space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Match score</span>
+                      <span className="font-bold text-green-600">{analysis.matchScore}/100</span>
+                    </div>
+                    {analysis.summary && <p className="text-gray-600">{analysis.summary}</p>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

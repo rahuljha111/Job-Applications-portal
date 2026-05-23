@@ -1,0 +1,13 @@
+package com.Jobtrackr.jta.notification.entity;
+
+public enum NotificationType {
+    APPLICATION_RECEIVED,
+    APPLICATION_STATUS_CHANGED,
+    APPLICATION_SHORTLISTED,
+    APPLICATION_REJECTED,
+    APPLICATION_HIRED,
+    JOB_POSTED,
+    JOB_CLOSED,
+    PROFILE_UPDATE,
+    SYSTEM_ANNOUNCEMENT
+}

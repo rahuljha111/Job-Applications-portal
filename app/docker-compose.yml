@@ -1,0 +1,73 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: jobtracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jobportal1}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-1234}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${POSTGRES_DB:-jobportal1}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./server/jta
+      dockerfile: Dockerfile
+    container_name: jobtracker-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-jobportal1}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-1234}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-minimum-32-chars}
+      JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION:-3600000}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-}
+      APP_NAME: ${APP_NAME:-Job Application Tracker}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-3.5-turbo}
+      AI_ENABLED: ${AI_ENABLED:-true}
+      FILE_UPLOAD_DIR: /app/uploads
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_RPM: ${RATE_LIMIT_RPM:-60}
+      RATE_LIMIT_AI_RPH: ${RATE_LIMIT_AI_RPH:-20}
+      RATE_LIMIT_LOGIN_RPM: ${RATE_LIMIT_LOGIN_RPM:-5}
+      # Temporary: allow Hibernate to create/update missing tables so the app can start
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    ports:
+      - "8081:8081"
+    volumes:
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8081/api}
+    container_name: jobtracker-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
+  uploads:

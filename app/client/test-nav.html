@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test Navigation</title></head>
+<body>
+<h1>Testing navigation to email verification</h1>
+<script>
+  const email = 'test@example.com';
+  const url = '/email-verification?email=' + encodeURIComponent(email);
+  console.log('Navigating to:', url);
+  console.log('Full URL:', window.location.origin + url);
+  setTimeout(() => {
+    window.location.href = url;
+  }, 2000);
+</script>
+</body>
+</html>

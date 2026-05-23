@@ -36,6 +36,7 @@ public class Job {
     @Enumerated(EnumType.STRING)
     private JobStatus status = JobStatus.OPEN;
 
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @ManyToOne

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { PortalTopbar } from "../../comoponents/PortalTopbar";
 import { Card, CardContent, CardHeader, CardTitle } from "../../comoponents/ui/card";
 import { Button } from "../../comoponents/ui/button";
@@ -6,8 +7,55 @@ import { Label } from "../../comoponents/ui/label";
 import { Switch } from "../../comoponents/ui/switch";
 import { Separator } from "../../comoponents/ui/separator";
 import { Textarea } from "../../comoponents/ui/textarea";
+import apiService from "../../services/api";
+import { toast } from "sonner";
 
 export function JobSeekerSettings() {
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await apiService.getUserProfile();
+        if (!mounted) return;
+        setProfile({
+          firstName: res.name?.split(" ")?.[0] || "",
+          lastName: res.name?.split(" ")?.slice(1).join(" ") || "",
+          email: res.email || "",
+          phone: res.location || "",
+          location: res.location || "",
+          bio: res.location || "",
+        });
+      } catch (err) {
+        console.warn("Failed to load profile", err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSave = async () => {
+    if (!profile) return;
+    setLoading(true);
+    try {
+      const payload = {
+        name: `${profile.firstName} ${profile.lastName}`.trim(),
+        email: profile.email,
+        location: profile.location,
+        bio: profile.bio,
+        phone: profile.phone,
+      };
+      await apiService.updateUserProfile(payload);
+      toast.success("Profile updated");
+    } catch (err: any) {
+      console.error("Profile update failed", err);
+      toast.error(err?.message || "Failed to update profile");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <PortalTopbar title="Settings" subtitle="Manage your account and preferences" />
@@ -22,30 +70,31 @@ export function JobSeekerSettings() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue="Sarah" />
+                  <Input id="firstName" value={profile?.firstName || ""} onChange={(e) => setProfile({...profile, firstName: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue="Johnson" />
+                  <Input id="lastName" value={profile?.lastName || ""} onChange={(e) => setProfile({...profile, lastName: e.target.value})} />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="sarah.j@email.com" />
+                <Input id="email" type="email" value={profile?.email || ""} onChange={(e) => setProfile({...profile, email: e.target.value})} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
-                <Input id="phone" type="tel" defaultValue="+1 (555) 123-4567" />
+                <Input id="phone" type="tel" value={profile?.phone || ""} onChange={(e) => setProfile({...profile, phone: e.target.value})} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="location">Location</Label>
-                <Input id="location" defaultValue="San Francisco, CA" />
+                <Input id="location" value={profile?.location || ""} onChange={(e) => setProfile({...profile, location: e.target.value})} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="bio">Bio</Label>
                 <Textarea 
                   id="bio" 
-                  defaultValue="Passionate full-stack developer with 5+ years of experience in React and Node.js"
+                  value={profile?.bio || ""}
+                  onChange={(e) => setProfile({...profile, bio: e.target.value})}
                   rows={4}
                 />
               </div>
@@ -139,8 +188,8 @@ export function JobSeekerSettings() {
 
           {/* Actions */}
           <div className="flex justify-end gap-4">
-            <Button variant="outline">Cancel</Button>
-            <Button className="bg-green-500 hover:bg-green-600">Save Changes</Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>Cancel</Button>
+            <Button className="bg-green-500 hover:bg-green-600" onClick={handleSave} disabled={loading}>{loading ? 'Saving...' : 'Save Changes'}</Button>
           </div>
         </div>
       </main>

@@ -1,17 +1,25 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Briefcase, ArrowLeft, Mail, Lock, User, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { Button } from "../comoponents/ui/button";
 import { Input } from "../comoponents/ui/input";
 import { Label } from "../comoponents/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../comoponents/ui/tabs";
 import { cn } from "../lib/utils";
+import { useAuth } from "../contexts/AuthContext";
+import { toast } from "sonner";
 
 export function Auth() {
   const [activeTab, setActiveTab] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [role, setRole] = useState("CANDIDATE");
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+  
+  const { login, register, error, clearError } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -19,17 +27,104 @@ export function Auth() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Clear errors when switching tabs
+  useEffect(() => {
+    clearError();
+  }, [activeTab, clearError]);
+
   // Form States
   const [loginData, setLoginData] = useState({ email: "", password: "" });
-  const [signupData, setSignupData] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+  const [signupData, setSignupData] = useState({ 
+    firstName: "", 
+    lastName: "", 
+    email: "", 
+    password: "", 
+    confirmPassword: "" 
+  });
   const [forgotEmail, setForgotEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => { e.preventDefault(); console.log(loginData); };
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); 
+    if (!loginData.email || !loginData.password) return;
+    
+    setIsLoading(true);
+    try {
+      await login(loginData.email, loginData.password);
+      toast.success("Login successful! Welcome back.");
+      navigate('/dashboard'); // Navigate to dashboard after successful login
+    } catch (err) {
+      toast.error("Login failed. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const checkPasswordRequirements = (password: string): string[] => {
+    const errors: string[] = [];
+    if (password.length < 8) errors.push("At least 8 characters");
+    if (!/[A-Z]/.test(password)) errors.push("One uppercase letter");
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) errors.push("One special character");
+    return errors;
+  };
+
+  const validatePassword = (password: string): { isValid: boolean; message: string } => {
+    if (password.length < 8) {
+      return { isValid: false, message: "Password must be at least 8 characters long" };
+    }
+    if (!/[A-Z]/.test(password)) {
+      return { isValid: false, message: "Password must contain at least one uppercase letter" };
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      return { isValid: false, message: "Password must contain at least one special character (!@#$%^&* etc.)" };
+    }
+    return { isValid: true, message: "" };
+  };
+
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (signupData.password !== signupData.confirmPassword) return alert("Passwords do not match");
-    console.log(signupData);
+    
+    if (!signupData.firstName || !signupData.lastName || !signupData.email || !signupData.password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    const passwordValidation = validatePassword(signupData.password);
+    if (!passwordValidation.isValid) {
+      toast.error(passwordValidation.message);
+      return;
+    }
+
+    if (signupData.password !== signupData.confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await register({
+        firstName: signupData.firstName,
+        lastName: signupData.lastName,
+        email: signupData.email,
+        password: signupData.password,
+        role: role
+      });
+      
+      console.log('Registration successful, response:', response);
+      toast.success("Registration successful! Please check your email to verify your account.");
+      
+      // Store email for verification page
+      const verificationUrl = `/email-verification?email=${encodeURIComponent(signupData.email)}`;
+      console.log('Navigating to:', verificationUrl);
+      
+      // Redirect to email verification page
+      navigate(verificationUrl);
+    } catch (err) {
+      console.error('Registration error:', err);
+      toast.error("Registration failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -105,6 +200,12 @@ export function Auth() {
                 <p className="text-slate-500 text-sm font-medium mt-1">Enter your details to access your dashboard</p>
               </header>
 
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                  <p className="text-red-600 text-sm font-medium">{error}</p>
+                </div>
+              )}
+
               <form onSubmit={handleLoginSubmit} className="space-y-5">
                 <div className="space-y-2">
                   <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Email Address</Label>
@@ -139,8 +240,12 @@ export function Auth() {
                   </div>
                 </div>
 
-                <Button className="w-full h-14 bg-slate-950 hover:bg-indigo-600 text-white font-bold rounded-2xl transition-all shadow-xl shadow-slate-200 text-base">
-                  Sign In
+                <Button 
+                  type="submit" 
+                  disabled={isLoading}
+                  className="w-full h-14 bg-slate-950 hover:bg-indigo-600 text-white font-bold rounded-2xl transition-all shadow-xl shadow-slate-200 text-base disabled:opacity-50"
+                >
+                  {isLoading ? "Signing In..." : "Sign In"}
                 </Button>
               </form>
 
@@ -162,35 +267,133 @@ export function Auth() {
                 <h2 className="text-3xl font-black text-slate-950 tracking-tight">Create account</h2>
                 <p className="text-slate-500 text-sm font-medium mt-1">Start your journey with us today</p>
               </header>
-              <form onSubmit={handleSignupSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Full Name</Label>
-                  <Input 
-                    placeholder="John Doe" 
-                    className="h-14 rounded-2xl border-slate-200 bg-slate-50/50 px-4 font-medium"
-                    onChange={(e) => setSignupData({...signupData, name: e.target.value})}
-                  />
+              
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                  <p className="text-red-600 text-sm font-medium">{error}</p>
                 </div>
+              )}
+              
+              <form onSubmit={handleSignupSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">First Name</Label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input 
+                        placeholder="John" 
+                        value={signupData.firstName}
+                        className="pl-12 h-14 rounded-2xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all font-medium"
+                        onChange={(e) => setSignupData({...signupData, firstName: e.target.value})}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Last Name</Label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input 
+                        placeholder="Doe" 
+                        value={signupData.lastName}
+                        className="pl-12 h-14 rounded-2xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all font-medium"
+                        onChange={(e) => setSignupData({...signupData, lastName: e.target.value})}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                   <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Email</Label>
-                  <Input 
-                    type="email" 
-                    placeholder="name@company.com" 
-                    className="h-14 rounded-2xl border-slate-200 bg-slate-50/50 px-4 font-medium"
-                    onChange={(e) => setSignupData({...signupData, email: e.target.value})}
-                  />
+                  <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Role</Label>
+                  <div className="relative">
+                    <div className="relative">
+                      <select
+                        value={role}
+                        onChange={(e) => setRole(e.target.value)}
+                        className="w-full h-14 pl-12 pr-12 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white transition-all font-medium appearance-none cursor-pointer"
+                      >
+                        <option value="CANDIDATE">Job Seeker</option>
+                        <option value="RECRUITER">Recruiter</option>
+                        <option value="ADMIN">Admin</option>
+                      </select>
+                      <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                   <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Email Address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input 
+                      type="email" 
+                      placeholder="name@company.com" 
+                      value={signupData.email}
+                      className="pl-12 h-14 rounded-2xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all font-medium"
+                      onChange={(e) => setSignupData({...signupData, email: e.target.value})}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                    <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Password</Label>
-                  <Input 
-                    type="password" 
-                    placeholder="••••••••" 
-                    className="h-14 rounded-2xl border-slate-200 bg-slate-50/50 px-4 font-medium"
-                    onChange={(e) => setSignupData({...signupData, password: e.target.value})}
-                  />
+                   <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input 
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••" 
+                      value={signupData.password}
+                      className="pl-12 pr-12 h-14 rounded-2xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all font-medium"
+                      onChange={(e) => {
+                        setSignupData({...signupData, password: e.target.value});
+                        setPasswordErrors(checkPasswordRequirements(e.target.value));
+                      }}
+                      required
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-950">
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                   <div className="text-xs ml-1 space-y-1">
+                     <p className="text-slate-500">Password must include:</p>
+                     <div className="space-y-1">
+                       <div className={`flex items-center gap-2 ${passwordErrors.includes("At least 8 characters") ? "text-red-500" : "text-green-600"}`}>
+                         {passwordErrors.includes("At least 8 characters") ? "✗" : "✓"} At least 8 characters
+                       </div>
+                       <div className={`flex items-center gap-2 ${passwordErrors.includes("One uppercase letter") ? "text-red-500" : "text-green-600"}`}>
+                         {passwordErrors.includes("One uppercase letter") ? "✗" : "✓"} One uppercase letter
+                       </div>
+                       <div className={`flex items-center gap-2 ${passwordErrors.includes("One special character") ? "text-red-500" : "text-green-600"}`}>
+                         {passwordErrors.includes("One special character") ? "✗" : "✓"} One special character (!@#$%^&* etc.)
+                       </div>
+                     </div>
+                   </div>
                 </div>
-                <Button className="w-full h-14 bg-slate-950 hover:bg-indigo-600 text-white font-bold rounded-2xl mt-4">
-                  Create Account
+                <div className="space-y-2">
+                   <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 ml-1">Confirm Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input 
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="••••••••" 
+                      value={signupData.confirmPassword}
+                      className="pl-12 pr-12 h-14 rounded-2xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all font-medium"
+                      onChange={(e) => setSignupData({...signupData, confirmPassword: e.target.value})}
+                      required
+                    />
+                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-950">
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+                <Button 
+                  type="submit" 
+                  disabled={isLoading}
+                  className="w-full h-14 bg-slate-950 hover:bg-indigo-600 text-white font-bold rounded-2xl mt-4 disabled:opacity-50"
+                >
+                  {isLoading ? "Creating Account..." : "Create Account"}
                 </Button>
               </form>
             </TabsContent>

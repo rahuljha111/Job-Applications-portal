@@ -28,18 +28,21 @@ public class ApplicationService {
 
     private final ApplicationRepository applicationRepository;
     private final JobRepo jobRepository;
-    private final UserRepository userRepository;
+        private final UserRepository userRepository;
+        private final com.Jobtrackr.jta.resume.repository.ResumeRepository resumeRepository;
 
-    public ApplicationService(ApplicationRepository applicationRepository,
-                              JobRepo jobRepository,
-                              UserRepository userRepository) {
-        this.applicationRepository = applicationRepository;
-        this.jobRepository = jobRepository;
-        this.userRepository = userRepository;
+        public ApplicationService(ApplicationRepository applicationRepository,
+                                                          JobRepo jobRepository,
+                                                          UserRepository userRepository,
+                                                          com.Jobtrackr.jta.resume.repository.ResumeRepository resumeRepository) {
+                this.applicationRepository = applicationRepository;
+                this.jobRepository = jobRepository;
+                this.userRepository = userRepository;
+                this.resumeRepository = resumeRepository;
     }
 
 
-public void apply(UUID jobId) {
+public void apply(UUID jobId, com.Jobtrackr.jta.application.dto.ApplyRequest request) {
 
     // 1️⃣ Extract authenticated user
     Authentication authentication =
@@ -81,12 +84,28 @@ public void apply(UUID jobId) {
         throw new BadRequestException("Job is closed");
     }
 
-    // 6️⃣ Save application
-    Application application = new Application();
-    application.setJob(job);
-    application.setCandidate(candidate);
+        // 6️⃣ Save application with optional metadata
+        Application application = new Application();
+        application.setJob(job);
+        application.setCandidate(candidate);
 
-    applicationRepository.save(application);
+        if (request != null) {
+                if (request.getCoverLetter() != null) {
+                        application.setCoverLetter(request.getCoverLetter());
+                }
+                if (request.getPortfolioUrl() != null) {
+                        application.setPortfolioUrl(request.getPortfolioUrl());
+                }
+                if (request.getResumeId() != null) {
+                        // validate resume belongs to candidate
+                        java.util.UUID rid = request.getResumeId();
+                        com.Jobtrackr.jta.resume.entity.Resume resume = resumeRepository.findByIdAndUserId(rid, candidate.getId())
+                                        .orElseThrow(() -> new NotFoundException("Resume not found or does not belong to candidate"));
+                        application.setResume(resume);
+                }
+        }
+
+        applicationRepository.save(application);
 }
 
     public List<ApplicationResponse> getApplicationsForJob(UUID jobId) {

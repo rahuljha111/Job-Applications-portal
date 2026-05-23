@@ -23,6 +23,8 @@ import com.Jobtrackr.jta.user.entity.User;
 import com.Jobtrackr.jta.user.repository.EmailVerificationTokenRepository;
 import com.Jobtrackr.jta.user.repository.PasswordResetTokenRepository;
 import com.Jobtrackr.jta.user.repository.UserRepository;
+import com.Jobtrackr.jta.verification.entity.EmailVerification;
+import com.Jobtrackr.jta.verification.service.EmailVerificationService;
 import com.Jobtrackr.jta.user.dto.RequestEmailVerificationRequest;
 import com.Jobtrackr.jta.user.dto.VerifyEmailRequest;
 import com.Jobtrackr.jta.user.util.PasswordValidator;
@@ -41,6 +43,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository resetTokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final EmailVerificationService emailVerificationService;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final JavaMailSender mailSender;
@@ -51,12 +54,14 @@ public class UserService {
     public UserService(UserRepository userRepository,
                        PasswordResetTokenRepository resetTokenRepository,
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
+                       EmailVerificationService emailVerificationService,
                        BCryptPasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil,
                        JavaMailSender mailSender) {
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
+        this.emailVerificationService = emailVerificationService;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.mailSender = mailSender;
@@ -74,8 +79,24 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole() != null ? request.getRole() : Role.CANDIDATE);
         user.setLocation(null);
+        
+        // User starts with unverified email - must verify to login
+        user.setEmailVerified(false);
 
         User savedUser = userRepository.save(user);
+        
+        // Send email verification OTP
+        try {
+            emailVerificationService.sendVerificationEmail(
+                savedUser.getEmail(),
+                savedUser.getName(),
+                EmailVerification.VerificationType.REGISTRATION
+            );
+        } catch (Exception e) {
+            // If email sending fails, still allow registration but log the error
+            // User can request resend later
+            System.err.println("Failed to send verification email: " + e.getMessage());
+        }
 
         return new UserResponse(
                 savedUser.getId(),
@@ -164,13 +185,20 @@ public class UserService {
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new ConflictException("Invalid password");
         }
+        
         if (!user.isEmailVerified()) {
-            throw new ConflictException("EMAIL_NOT_VERIFIED");
+            throw new UnauthorizedActionException("Email not verified. Please check your email for verification code.");
         }
 
-        String token = jwtUtil.generateToken(
+        String accessToken = jwtUtil.generateAccessToken(
                 user.getEmail(),
-                user.getRole().name()
+                user.getRole().name(),
+                user.getId()
+        );
+        
+        String refreshToken = jwtUtil.generateRefreshToken(
+                user.getEmail(),
+                user.getId()
         );
 
         AuthUser authUser = new AuthUser(
@@ -180,7 +208,42 @@ public class UserService {
                 user.getRole(),
                 user.getLocation()
         );
-        return new LoginResponse(token, authUser);
+        return new LoginResponse(accessToken, refreshToken, authUser);
+    }
+    
+    public LoginResponse refreshToken(String refreshToken) {
+        String email = jwtUtil.validateToken(refreshToken);
+        if (email == null) {
+            throw new BadRequestException("Invalid refresh token");
+        }
+        
+        if (!jwtUtil.isRefreshToken(refreshToken)) {
+            throw new BadRequestException("Invalid token type");
+        }
+        
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        
+        String newAccessToken = jwtUtil.generateAccessToken(
+                user.getEmail(),
+                user.getRole().name(),
+                user.getId()
+        );
+        
+        String newRefreshToken = jwtUtil.generateRefreshToken(
+                user.getEmail(),
+                user.getId()
+        );
+        
+        AuthUser authUser = new AuthUser(
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getRole(),
+                user.getLocation()
+        );
+        
+        return new LoginResponse(newAccessToken, newRefreshToken, authUser);
     }
 
     public AuthUser getCurrentUser(String email) {

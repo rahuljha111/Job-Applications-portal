@@ -3,6 +3,9 @@ import { createBrowserRouter } from "react-router";
 // Pages
 import { Home } from "./pages/Home";
 import { Auth } from "./pages/Auth";
+import { Dashboard } from "./pages/Dashboard";
+import EmailVerification from "./pages/EmailVerification";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 // Admin
 import { AdminLayout } from "./pages/admin/AdminLayout";
@@ -40,10 +43,30 @@ export const router = createBrowserRouter([
     path: "/auth",
     Component: Auth,
   },
+  {
+    path: "/email-verification",
+    Component: EmailVerification,
+  },
+  {
+    path: "/verify-email",
+    Component: EmailVerification,
+  },
+  {
+    path: "/dashboard",
+    element: (
+      <ProtectedRoute>
+        <Dashboard />
+      </ProtectedRoute>
+    ),
+  },
   // Admin Portal Routes
   {
     path: "/admin",
-    Component: AdminLayout,
+    element: (
+      <ProtectedRoute allowedRoles={['ADMIN']}>
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { index: true, Component: AdminDashboard },
       { path: "users", Component: UserManagement },
@@ -56,7 +79,11 @@ export const router = createBrowserRouter([
   // Job Seeker Portal Routes
   {
     path: "/job-seeker",
-    Component: JobSeekerLayout,
+    element: (
+      <ProtectedRoute allowedRoles={['CANDIDATE']}>
+        <JobSeekerLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { index: true, Component: JobSeekerDashboard },
       { path: "applications", Component: Applications },
@@ -69,7 +96,11 @@ export const router = createBrowserRouter([
   // Job Poster Portal Routes
   {
     path: "/job-poster",
-    Component: JobPosterLayout,
+    element: (
+      <ProtectedRoute allowedRoles={['RECRUITER']}>
+        <JobPosterLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { index: true, Component: JobPosterDashboard },
       { path: "jobs", Component: JobListings },
